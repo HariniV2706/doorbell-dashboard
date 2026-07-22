@@ -183,7 +183,7 @@
     let cameraStarted = false;
     let lastEntryId = null;
     let currentPersonCount = 0;
-    let currentPriority = 1;
+    let currentPriority = 1; // Saved Priority State
     let lastCloudSyncTime = 0;
     let isDetecting = false;
 
@@ -195,7 +195,7 @@
     const hudCount = document.getElementById('hud-count');
     const clockDisplay = document.getElementById('clock-display');
 
-    // 1. Independent Non-Blocking Clock Loop (Prevents Freezing)
+    // 1. Independent Non-Blocking Clock Loop
     function updateClockSmooth() {
       const now = new Date();
       const dateOptions = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
@@ -288,7 +288,6 @@
         isDetecting = false;
       }
 
-      // Yield control back to main UI thread every 100ms
       setTimeout(() => requestAnimationFrame(detectFrameLoop), 100);
     }
 
@@ -304,6 +303,9 @@
           const priority = parseInt(latestFeed.field1, 10);
           console.log("Cloud Event Received! Priority =", priority);
 
+          // Update local priority variable
+          currentPriority = priority;
+
           if (priority === 3 || priority >= 3) {
             statusBadge.innerHTML = "🚨 <b>EMERGENCY VISITOR</b>";
             statusBadge.style.borderColor = "#ef4444";
@@ -318,7 +320,7 @@
             statusBadge.style.color = "#22c55e";
           }
 
-          // Auto Start Camera
+          // Auto Start Camera on Trigger
           startCamera();
         }
       } catch (err) {
@@ -329,13 +331,14 @@
     // Poll ThingSpeak every 1 second
     setInterval(pollThingSpeakFast, 1000);
 
-    // 6. Sync People Count back to ThingSpeak Field 2
+    // 6. Sync People Count back to ThingSpeak Field 2 ONLY (Crucial Fix)
     async function syncCountToThingSpeak() {
       const now = Date.now();
       if (now - lastCloudSyncTime > 15000) {
         lastCloudSyncTime = now;
         try {
-          const url = `https://api.thingspeak.com/update?api_key=${WRITE_KEY}&field1=${currentPriority}&field2=${currentPersonCount}`;
+          // ONLY UPDATE FIELD 2 so Field 1 (Priority) is NOT overwritten by the browser!
+          const url = `https://api.thingspeak.com/update?api_key=${WRITE_KEY}&field2=${currentPersonCount}`;
           await fetch(url);
           console.log(`📊 Cloud Sync -> Field 2 (People Count): ${currentPersonCount}`);
         } catch (err) {
