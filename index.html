@@ -74,113 +74,143 @@
     </div>
 
     <script>
-        // --- ThingSpeak Pre-Configured Credentials ---
-        const CHANNEL_ID = "3433070";
-        const READ_API_KEY = "B9SC45D5HXQ6ZVPG";
+       // --- Credentials ---
+const CHANNEL_ID = "3433070";
+const READ_API_KEY = "B9SC45D5HXQ6ZVPG";
+const WRITE_API_KEY = "5WN4JU80SLVSZNXT"; // Used to send camera count to ThingSpeak
 
-        let video = document.getElementById('webcam');
-        let canvas = document.getElementById('output-canvas');
-        let ctx = canvas.getContext('2d');
-        let isCameraOn = false;
-        let model = null;
+let video = document.getElementById('webcam');
+let canvas = document.getElementById('output-canvas');
+let ctx = canvas.getContext('2d');
+let isCameraOn = false;
+let model = null;
+let currentPersonCount = 0;
 
-        // Load AI Object Detection Model
-        cocoSsd.load().then(loadedModel => { model = loadedModel; });
+// Load TensorFlow COCO-SSD Model
+cocoSsd.load().then(loadedModel => { 
+    model = loadedModel; 
+    console.log("AI Person Detector Model Loaded!");
+});
 
-        async function toggleCamera() {
-            const btn = document.getElementById('cam-btn');
-            if (!isCameraOn) {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    video.srcObject = stream;
-                    isCameraOn = true;
-                    btn.innerText = "🛑 Stop Camera";
-                    btn.style.background = "#dc2626";
-                    video.addEventListener('loadeddata', () => {
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                        detectFrame();
-                    });
-                } catch (err) {
-                    alert("Unable to access camera!");
-                }
-            } else {
-                let stream = video.srcObject;
-                stream.getTracks().forEach(track => track.stop());
-                video.srcObject = null;
-                isCameraOn = false;
-                btn.innerText = "🎥 Start Door Camera";
-                btn.style.background = "#0284c7";
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                document.getElementById('people-count').innerText = "0";
-            }
+async function toggleCamera() {
+    const btn = document.getElementById('cam-btn');
+    if (!isCameraOn) {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            isCameraOn = true;
+            btn.innerText = "🛑 Stop Camera";
+            btn.style.background = "#dc2626";
+            video.addEventListener('loadeddata', () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                detectFrame();
+            });
+        } catch (err) {
+            alert("Camera access denied or device not found!");
         }
+    } else {
+        let stream = video.srcObject;
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+        isCameraOn = false;
+        btn.innerText = "🎥 Start Door Camera";
+        btn.style.background = "#0284c7";
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        document.getElementById('people-count').innerText = "0";
+        currentPersonCount = 0;
+    }
+}
 
-        async function detectFrame() {
-            if (!isCameraOn) return;
-            if (model) {
-                const predictions = await model.detect(video);
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                let personCount = 0;
+async function detectFrame() {
+    if (!isCameraOn) return;
+    if (model) {
+        const predictions = await model.detect(video);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let personCount = 0;
 
-                predictions.forEach(prediction => {
-                    if (prediction.class === 'person') {
-                        personCount++;
-                        const [x, y, width, height] = prediction.bbox;
-                        ctx.strokeStyle = '#38bdf8';
-                        ctx.lineWidth = 3;
-                        ctx.strokeRect(x, y, width, height);
-                        ctx.fillStyle = '#38bdf8';
-                        ctx.font = '16px Arial';
-                        ctx.fillText(`Person (${Math.round(prediction.score * 100)}%)`, x, y > 10 ? y - 5 : 10);
-                    }
-                });
-                document.getElementById('people-count').innerText = personCount;
-            }
-            requestAnimationFrame(detectFrame);
-        }
-
-        async function fetchThingSpeakData() {
-            try {
-                const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?results=1&api_key=${READ_API_KEY}`;
-                const res = await fetch(url);
-                const data = await res.json();
+        predictions.forEach(prediction => {
+            // Filter strictly for human detection
+            if (prediction.class === 'person' && prediction.score > 0.5) {
+                personCount++;
+                const [x, y, width, height] = prediction.bbox;
                 
-                if (data.feeds.length > 0) {
-                    const lastFeed = data.feeds[0];
-                    const priority = parseInt(lastFeed.field1);
-                    const badge = document.getElementById('priority-badge');
-                    const text = document.getElementById('visitor-text');
+                // Draw Bounding Box around person
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x, y, width, height);
+                
+                // Draw Label & Confidence Percentage
+                ctx.fillStyle = '#38bdf8';
+                ctx.font = '16px Arial';
+                ctx.fillText(`Person (${Math.round(prediction.score * 100)}%)`, x, y > 10 ? y - 5 : 10);
+            }
+        });
 
-                    if (priority === 1) {
-                        badge.className = "badge normal";
-                        badge.innerText = "🔔 NORMAL VISITOR";
-                        text.innerText = "1 Press: Someone is at the front door.";
-                    } else if (priority === 2) {
-                        badge.className = "badge delivery";
-                        badge.innerText = "📦 DELIVERY PERSON";
-                        text.innerText = "2 Presses: Package delivery person.";
-                    } else if (priority >= 3) {
-                        badge.className = "badge emergency";
-                        badge.innerText = "🚨 EMERGENCY VISITOR";
-                        text.innerText = "3+ Presses: Urgent/Emergency visitor!";
-                    }
-                }
-            } catch (err) {
-                console.error("Error connecting to ThingSpeak:", err);
+        // Update live screen tally
+        currentPersonCount = personCount;
+        document.getElementById('people-count').innerText = currentPersonCount;
+    }
+    requestAnimationFrame(detectFrame);
+}
+
+// Send Live Person Count to ThingSpeak Field 2
+async function sendPersonCountToThingSpeak() {
+    if (!isCameraOn) return;
+    try {
+        const url = `https://api.thingspeak.com/update?api_key=${WRITE_API_KEY}&field2=${currentPersonCount}`;
+        await fetch(url);
+        console.log(`--> ThingSpeak Field 2 Updated! Person Count: ${currentPersonCount}`);
+    } catch (err) {
+        console.error("Error sending person count to ThingSpeak:", err);
+    }
+}
+
+// Read Visitor Priority Code from ThingSpeak Field 1
+async function fetchThingSpeakData() {
+    try {
+        const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?results=1&api_key=${READ_API_KEY}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        if (data.feeds.length > 0) {
+            const lastFeed = data.feeds[0];
+            const priority = parseInt(lastFeed.field1);
+            const badge = document.getElementById('priority-badge');
+            const text = document.getElementById('visitor-text');
+
+            if (priority === 1) {
+                badge.className = "badge normal";
+                badge.innerText = "🔔 NORMAL VISITOR";
+                text.innerText = "1 Press: Someone is at the front door.";
+            } else if (priority === 2) {
+                badge.className = "badge delivery";
+                badge.innerText = "📦 DELIVERY PERSON";
+                text.innerText = "2 Presses: Package delivery person.";
+            } else if (priority >= 3) {
+                badge.className = "badge emergency";
+                badge.innerText = "🚨 EMERGENCY VISITOR";
+                text.innerText = "3+ Presses: Urgent/Emergency visitor!";
             }
         }
+    } catch (err) {
+        console.error("Error connecting to ThingSpeak:", err);
+    }
+}
 
-        function speakMessage() {
-            const input = document.getElementById('voice-input').value;
-            if (input) {
-                const speech = new SpeechSynthesisUtterance(input);
-                window.speechSynthesis.speak(speech);
-            }
-        }
+function speakMessage() {
+    const input = document.getElementById('voice-input').value;
+    if (input) {
+        const speech = new SpeechSynthesisUtterance(input);
+        window.speechSynthesis.speak(speech);
+    }
+}
 
-        // Poll ThingSpeak every 3 seconds for updates from Wokwi
-        setInterval(fetchThingSpeakData, 3000);
+// Poll Wokwi Priority Alerts every 3 seconds
+setInterval(fetchThingSpeakData, 3000);
+
+// Sync Live Person Count to ThingSpeak Cloud every 15 seconds (ThingSpeak Rate Limit)
+setInterval(sendPersonCountToThingSpeak, 15000);
     </script>
 </body>
 </html>
