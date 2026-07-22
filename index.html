@@ -267,37 +267,37 @@
     // FIX 3: Ultra-Fast ThingSpeak Polling (1-Second Interval)
     // -------------------------------------------------------------
     async function pollThingSpeakFast() {
-      try {
-        // Cache-busting parameter (?nocache) forces fresh lookup from ThingSpeak
-        const response = await fetch(`https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds/last.json?api_key=${READ_KEY}&nocache=${Date.now()}`);
-        const latestFeed = await response.json();
-        
-        if (latestFeed && latestFeed.entry_id && latestFeed.entry_id !== lastEntryId) {
-          lastEntryId = latestFeed.entry_id;
-          currentPriority = parseInt(latestFeed.field1) || 1;
+  try {
+    const response = await fetch(`https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds/last.json?api_key=${READ_KEY}&nocache=${Date.now()}`);
+    const latestFeed = await response.json();
+    
+    if (latestFeed && latestFeed.entry_id && latestFeed.entry_id !== lastEntryId) {
+      lastEntryId = latestFeed.entry_id;
+      
+      // Parse field1 reliably
+      const priority = parseInt(latestFeed.field1, 10);
+      console.log("Received Priority from Cloud:", priority);
 
-          if (currentPriority === 1) {
-            statusBadge.innerHTML = "🔔 <b>NORMAL VISITOR</b>";
-            statusBadge.style.borderColor = "#22c55e";
-          } else if (currentPriority === 2) {
-            statusBadge.innerHTML = "📦 <b>DELIVERY PERSON</b>";
-            statusBadge.style.borderColor = "#3b82f6";
-          } else if (currentPriority === 3) {
-            statusBadge.innerHTML = "🚨 <b>EMERGENCY VISITOR</b>";
-            statusBadge.style.borderColor = "#ef4444";
-          }
-
-          startCamera();
-        }
-      } catch (err) {
-        console.error("Fast Poll Error:", err);
+      if (priority === 3 || priority >= 3) {
+        statusBadge.innerHTML = "🚨 <b>EMERGENCY VISITOR</b>";
+        statusBadge.style.borderColor = "#ef4444";
+        statusBadge.style.color = "#ef4444";
+      } else if (priority === 2) {
+        statusBadge.innerHTML = "📦 <b>DELIVERY PERSON</b>";
+        statusBadge.style.borderColor = "#3b82f6";
+        statusBadge.style.color = "#3b82f6";
+      } else {
+        statusBadge.innerHTML = "🔔 <b>NORMAL VISITOR</b>";
+        statusBadge.style.borderColor = "#22c55e";
+        statusBadge.style.color = "#22c55e";
       }
+
+      startCamera();
     }
-
-    // Poll ThingSpeak every 1000ms (1 second) for instant detection
-    setInterval(pollThingSpeakFast, 1000);
-
-    // Sync count to ThingSpeak
+  } catch (err) {
+    console.error("Fast Poll Error:", err);
+  }
+}
     async function syncCountToThingSpeak() {
       const now = Date.now();
       if (now - lastCloudSyncTime > 15000) {
