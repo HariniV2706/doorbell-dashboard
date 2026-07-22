@@ -198,12 +198,33 @@ async function fetchThingSpeakData() {
     }
 }
 
+// Declare globally outside the function to prevent garbage collection
+let currentUtterance = null;
+
 function speakMessage() {
-    const input = document.getElementById('voice-input').value;
-    if (input) {
-        const speech = new SpeechSynthesisUtterance(input);
-        window.speechSynthesis.speak(speech);
+    const textInput = document.getElementById('voice-input').value;
+
+    if (!textInput.trim()) {
+        alert("Please enter a message to speak!");
+        return;
     }
+
+    // Cancel any previous speech stuck in queue
+    window.speechSynthesis.cancel();
+
+    // Create a global utterance instance
+    currentUtterance = new SpeechSynthesisUtterance(textInput);
+    currentUtterance.rate = 1.0;  // Speed (0.1 to 10)
+    currentUtterance.pitch = 1.0; // Pitch (0 to 2)
+    currentUtterance.lang = 'en-US';
+
+    // Log events for debugging in Console (F12)
+    currentUtterance.onstart = () => console.log("🔊 Speech Started...");
+    currentUtterance.onend = () => console.log("✅ Speech Completed!");
+    currentUtterance.onerror = (e) => console.error("❌ Speech Error:", e);
+
+    // Speak
+    window.speechSynthesis.speak(currentUtterance);
 }
 
 // Poll Wokwi Priority Alerts every 3 seconds
