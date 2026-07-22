@@ -1,82 +1,214 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Smart Doorbell 2.0 - Visitor Priority & AI Vision Dashboard</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Doorbell 2.0 - Auto Camera Dashboard</title>
   
-  <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="style.css" />
-  
-  <!-- TensorFlow.js and COCO-SSD Model Libraries -->
+  <!-- TensorFlow.js and COCO-SSD -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #0f172a;
+      color: #ffffff;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 { color: #38bdf8; margin-bottom: 5px; }
+    .status-badge {
+      display: inline-block;
+      padding: 10px 20px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      border-radius: 8px;
+      margin: 15px 0;
+      background-color: #1e293b;
+      border: 1px solid #334155;
+    }
+    .video-container {
+      position: relative;
+      width: 640px;
+      height: 480px;
+      margin: 20px auto;
+      border: 3px solid #38bdf8;
+      border-radius: 12px;
+      overflow: hidden;
+      background-color: #000;
+    }
+    video, canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 640px;
+      height: 480px;
+    }
+    .controls {
+      margin-top: 20px;
+    }
+    input[type="text"] {
+      padding: 10px;
+      width: 300px;
+      border-radius: 5px;
+      border: 1px solid #334155;
+      font-size: 1rem;
+    }
+    button {
+      padding: 10px 20px;
+      background-color: #38bdf8;
+      border: none;
+      color: #0f172a;
+      font-weight: bold;
+      font-size: 1rem;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover { background-color: #7dd3fc; }
+  </style>
 </head>
 <body>
-  <div class="dashboard-container">
-    
-    <!-- HEADER -->
-    <header class="header">
-      <h1>🔔 Smart Doorbell 2.0</h1>
-      <p class="subtitle">IoT-Enabled Visitor Priority Alert & AI Computer Vision System</p>
-    </header>
 
-    <!-- STATUS BANNER -->
-    <section class="status-card" id="statusCard">
-      <div class="status-indicator" id="statusDot"></div>
-      <div class="status-info">
-        <span class="status-label">Current Visitor Status</span>
-        <h2 id="statusText">WAITING FOR VISITOR...</h2>
-        <span class="timestamp" id="lastUpdated">Last sync: --:--:--</span>
-      </div>
-    </section>
+  <h1>🔔 Smart Doorbell 2.0</h1>
+  <p>Auto-Camera Trigger on Wokwi Button Press</p>
 
-    <!-- MAIN GRID LAYOUT -->
-    <main class="grid-layout">
-      
-      <!-- LEFT PANEL: CAMERA & AI DETECTION -->
-      <div class="card video-card">
-        <div class="card-header">
-          <h3>🎥 Live AI Camera Feed</h3>
-          <span class="badge" id="peopleCountBadge">People Count: 0</span>
-        </div>
-        <div class="video-container">
-          <video id="webcamVideo" autoplay playsinline muted></video>
-          <canvas id="detectionCanvas"></canvas>
-          <div class="overlay-msg" id="cameraOverlay">
-            Waiting for doorbell press in Wokwi to open camera...
-          </div>
-        </div>
-      </div>
+  <div id="status-badge" class="status-badge">⏳ Waiting for Doorbell Press...</div>
 
-      <!-- RIGHT PANEL: VOICE INTERCOM & LOGS -->
-      <div class="card control-card">
-        <h3>📢 Voice Response (Text-to-Speech)</h3>
-        <p class="card-desc">Send immediate voice feedback to the visitor at the door:</p>
-        
-        <div class="quick-responses">
-          <button onclick="speakPreset('Please wait a moment, I am coming to the door.')">⏳ "Please wait"</button>
-          <button onclick="speakPreset('Please leave the package at the front door.')">📦 "Leave package"</button>
-          <button onclick="speakPreset('Please state your business clearly.')">❓ "State business"</button>
-        </div>
-
-        <div class="custom-speech">
-          <input type="text" id="customTextInput" placeholder="Type custom voice message..." />
-          <button id="speakBtn" onclick="speakCustomText()">🔊 Speak</button>
-        </div>
-
-        <hr class="divider" />
-
-        <h3>📋 Activity Logs</h3>
-        <ul id="logList" class="log-list">
-          <li>System initialized. Ready for incoming triggers...</li>
-        </ul>
-      </div>
-
-    </main>
+  <div class="video-container">
+    <video id="webcam" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
   </div>
 
-  <!-- JavaScript File -->
-  <script src="script.js"></script>
+  <div class="controls">
+    <input type="text" id="voice-input" placeholder="Type message to speak to visitor...">
+    <button onclick="speakMessage()">🔊 Speak Message</button>
+  </div>
+
+  <script>
+    const CHANNEL_ID = "3433070";
+    const READ_KEY = "B9SC45D5HXQ6ZVPG";
+    const WRITE_KEY = "5WN4JU80SLVSZNXT";
+
+    let model = null;
+    let cameraStarted = false;
+    let lastEntryId = null;
+    let currentUtterance = null; // Global utterance reference to fix Chrome bug
+
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const statusBadge = document.getElementById('status-badge');
+
+    // Load TensorFlow COCO-SSD Model on startup
+    async function loadAIModel() {
+      console.log("Loading AI Vision Model...");
+      model = await cocoSsd.load();
+      console.log("✅ AI Model Loaded Successfully!");
+    }
+    loadAIModel();
+
+    // Auto-Start Web Camera Function
+    async function startCamera() {
+      if (cameraStarted) return;
+      
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        video.srcObject = stream;
+        
+        video.onloadeddata = () => {
+          canvas.width = video.videoWidth || 640;
+          canvas.height = video.videoHeight || 480;
+          cameraStarted = true;
+          console.log("🎥 Camera Auto-Started!");
+          detectFrame();
+        };
+      } catch (err) {
+        console.error("Camera access error:", err);
+        alert("Please allow camera access in browser permissions!");
+      }
+    }
+
+    // AI Detection Loop
+    async function detectFrame() {
+      if (!cameraStarted || !model) return;
+
+      const predictions = await model.detect(video);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      let personCount = 0;
+
+      predictions.forEach(prediction => {
+        if (prediction.class === 'person' && prediction.score > 0.5) {
+          personCount++;
+          const [x, y, width, height] = prediction.bbox;
+
+          // Bounding Box
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(x, y, width, height);
+
+          // Label
+          ctx.fillStyle = '#38bdf8';
+          ctx.font = '16px Segoe UI';
+          ctx.fillText(`Person (${Math.round(prediction.score * 100)}%)`, x, y > 20 ? y - 10 : 20);
+        }
+      });
+
+      // Optional: Post person count to ThingSpeak Field 2
+      // sendPersonCountToCloud(personCount);
+
+      requestAnimationFrame(detectFrame);
+    }
+
+    // Poll ThingSpeak for Wokwi Button Press
+    async function pollThingSpeak() {
+      try {
+        const response = await fetch(`https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?api_key=${READ_KEY}&results=1`);
+        const data = await response.json();
+        
+        if (data.feeds && data.feeds.length > 0) {
+          const latestFeed = data.feeds[0];
+          
+          // Check for NEW incoming data
+          if (latestFeed.entry_id !== lastEntryId) {
+            lastEntryId = latestFeed.entry_id;
+            const priority = parseInt(latestFeed.field1);
+
+            if (priority === 1) {
+              statusBadge.innerHTML = "🔔 <b>NORMAL VISITOR</b>";
+              statusBadge.style.borderColor = "#22c55e"; // Green
+              startCamera(); // AUTO-OPEN CAMERA
+            } else if (priority === 2) {
+              statusBadge.innerHTML = "📦 <b>DELIVERY PERSON</b>";
+              statusBadge.style.borderColor = "#3b82f6"; // Blue
+              startCamera(); // AUTO-OPEN CAMERA
+            } else if (priority === 3) {
+              statusBadge.innerHTML = "🚨 <b>EMERGENCY VISITOR</b>";
+              statusBadge.style.borderColor = "#ef4444"; // Red
+              startCamera(); // AUTO-OPEN CAMERA
+            }
+          }
+        }
+      } catch (err) {
+        console.error("ThingSpeak Polling Error:", err);
+      }
+    }
+
+    // Speech Synthesis
+    function speakMessage() {
+      const text = document.getElementById('voice-input').value;
+      if (!text.trim()) return;
+
+      window.speechSynthesis.cancel();
+      currentUtterance = new SpeechSynthesisUtterance(text);
+      currentUtterance.lang = 'en-US';
+      window.speechSynthesis.speak(currentUtterance);
+    }
+
+    // Poll ThingSpeak every 2 seconds
+    setInterval(pollThingSpeak, 2000);
+  </script>
 </body>
 </html>
