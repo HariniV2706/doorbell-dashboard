@@ -1,237 +1,82 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Doorbell 2.0 - Security Dashboard</title>
-    
-    <!-- TensorFlow.js and COCO-SSD for Real-Time Camera Detection -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
-
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: #0f172a; color: #f8fafc; padding: 20px; }
-        header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid #334155; }
-        h1 { font-size: 1.5rem; color: #38bdf8; }
-        
-        .container { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-top: 20px; }
-        .card { background: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; }
-        
-        /* Video Container */
-        .video-wrapper { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; }
-        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-        
-        /* Status Badges */
-        .badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-weight: bold; margin-top: 10px; }
-        .normal { background: #16a34a; }
-        .delivery { background: #0284c7; }
-        .emergency { background: #dc2626; }
-        .waiting { background: #64748b; }
-        
-        button { width: 100%; padding: 12px; margin-top: 10px; background: #0284c7; color: white; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.2s; }
-        button:hover { background: #0369a1; }
-        input { width: 100%; padding: 10px; margin-top: 10px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; }
-        
-        @media (max-width: 768px) { .container { grid-template-columns: 1fr; } }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Doorbell 2.0 - Visitor Priority & AI Vision Dashboard</title>
+  
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="style.css" />
+  
+  <!-- TensorFlow.js and COCO-SSD Model Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 </head>
 <body>
-
-    <header>
-        <h1>🔔 Doorbell 2.0 Security Dashboard</h1>
-        <div style="font-size: 0.9rem; color: #94a3b8;">Channel ID: <strong>3433070</strong></div>
+  <div class="dashboard-container">
+    
+    <!-- HEADER -->
+    <header class="header">
+      <h1>🔔 Smart Doorbell 2.0</h1>
+      <p class="subtitle">IoT-Enabled Visitor Priority Alert & AI Computer Vision System</p>
     </header>
 
-    <div class="container">
-        <!-- Live AI Camera Feed -->
-        <div class="card">
-            <h2>🎥 Live Door Camera</h2>
-            <div class="video-wrapper" style="margin-top: 15px;">
-                <video id="webcam" autoplay playsinline muted></video>
-                <canvas id="output-canvas"></canvas>
-            </div>
-            <button id="cam-btn" onclick="toggleCamera()">Start Door Camera</button>
+    <!-- STATUS BANNER -->
+    <section class="status-card" id="statusCard">
+      <div class="status-indicator" id="statusDot"></div>
+      <div class="status-info">
+        <span class="status-label">Current Visitor Status</span>
+        <h2 id="statusText">WAITING FOR VISITOR...</h2>
+        <span class="timestamp" id="lastUpdated">Last sync: --:--:--</span>
+      </div>
+    </section>
+
+    <!-- MAIN GRID LAYOUT -->
+    <main class="grid-layout">
+      
+      <!-- LEFT PANEL: CAMERA & AI DETECTION -->
+      <div class="card video-card">
+        <div class="card-header">
+          <h3>🎥 Live AI Camera Feed</h3>
+          <span class="badge" id="peopleCountBadge">People Count: 0</span>
         </div>
-
-        <!-- System Status & Controls -->
-        <div class="card">
-            <h2>📊 Visitor Priority Alert</h2>
-            <div id="priority-badge" class="badge waiting">Waiting for Wokwi Data...</div>
-            <p id="visitor-text" style="margin-top: 10px; color: #cbd5e1;">Press button in Wokwi simulation...</p>
-
-            <hr style="border-color: #334155; margin: 20px 0;">
-
-            <h2>👥 People Near Door</h2>
-            <h1 id="people-count" style="font-size: 3rem; color: #38bdf8; margin-top: 5px;">0</h1>
-
-            <hr style="border-color: #334155; margin: 20px 0;">
-
-            <h2>🎙️ Voice Message to Visitor</h2>
-            <input type="text" id="voice-input" placeholder="e.g., Leave the package at the door">
-            <button onclick="speakMessage()" style="background: #16a34a;">🔊 Speak Message</button>
+        <div class="video-container">
+          <video id="webcamVideo" autoplay playsinline muted></video>
+          <canvas id="detectionCanvas"></canvas>
+          <div class="overlay-msg" id="cameraOverlay">
+            Waiting for doorbell press in Wokwi to open camera...
+          </div>
         </div>
-    </div>
+      </div>
 
-    <script>
-       // --- Credentials ---
-const CHANNEL_ID = "3433070";
-const READ_API_KEY = "B9SC45D5HXQ6ZVPG";
-const WRITE_API_KEY = "5WN4JU80SLVSZNXT"; // Used to send camera count to ThingSpeak
-
-let video = document.getElementById('webcam');
-let canvas = document.getElementById('output-canvas');
-let ctx = canvas.getContext('2d');
-let isCameraOn = false;
-let model = null;
-let currentPersonCount = 0;
-
-// Load TensorFlow COCO-SSD Model
-cocoSsd.load().then(loadedModel => { 
-    model = loadedModel; 
-    console.log("AI Person Detector Model Loaded!");
-});
-
-async function toggleCamera() {
-    const btn = document.getElementById('cam-btn');
-    if (!isCameraOn) {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            video.srcObject = stream;
-            isCameraOn = true;
-            btn.innerText = "🛑 Stop Camera";
-            btn.style.background = "#dc2626";
-            video.addEventListener('loadeddata', () => {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                detectFrame();
-            });
-        } catch (err) {
-            alert("Camera access denied or device not found!");
-        }
-    } else {
-        let stream = video.srcObject;
-        if (stream) stream.getTracks().forEach(track => track.stop());
-        video.srcObject = null;
-        isCameraOn = false;
-        btn.innerText = "🎥 Start Door Camera";
-        btn.style.background = "#0284c7";
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        document.getElementById('people-count').innerText = "0";
-        currentPersonCount = 0;
-    }
-}
-
-async function detectFrame() {
-    if (!isCameraOn) return;
-    if (model) {
-        const predictions = await model.detect(video);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        let personCount = 0;
-
-        predictions.forEach(prediction => {
-            // Filter strictly for human detection
-            if (prediction.class === 'person' && prediction.score > 0.5) {
-                personCount++;
-                const [x, y, width, height] = prediction.bbox;
-                
-                // Draw Bounding Box around person
-                ctx.strokeStyle = '#38bdf8';
-                ctx.lineWidth = 3;
-                ctx.strokeRect(x, y, width, height);
-                
-                // Draw Label & Confidence Percentage
-                ctx.fillStyle = '#38bdf8';
-                ctx.font = '16px Arial';
-                ctx.fillText(`Person (${Math.round(prediction.score * 100)}%)`, x, y > 10 ? y - 5 : 10);
-            }
-        });
-
-        // Update live screen tally
-        currentPersonCount = personCount;
-        document.getElementById('people-count').innerText = currentPersonCount;
-    }
-    requestAnimationFrame(detectFrame);
-}
-
-// Send Live Person Count to ThingSpeak Field 2
-async function sendPersonCountToThingSpeak() {
-    if (!isCameraOn) return;
-    try {
-        const url = `https://api.thingspeak.com/update?api_key=${WRITE_API_KEY}&field2=${currentPersonCount}`;
-        await fetch(url);
-        console.log(`--> ThingSpeak Field 2 Updated! Person Count: ${currentPersonCount}`);
-    } catch (err) {
-        console.error("Error sending person count to ThingSpeak:", err);
-    }
-}
-
-// Read Visitor Priority Code from ThingSpeak Field 1
-async function fetchThingSpeakData() {
-    try {
-        const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?results=1&api_key=${READ_API_KEY}`;
-        const res = await fetch(url);
-        const data = await res.json();
+      <!-- RIGHT PANEL: VOICE INTERCOM & LOGS -->
+      <div class="card control-card">
+        <h3>📢 Voice Response (Text-to-Speech)</h3>
+        <p class="card-desc">Send immediate voice feedback to the visitor at the door:</p>
         
-        if (data.feeds.length > 0) {
-            const lastFeed = data.feeds[0];
-            const priority = parseInt(lastFeed.field1);
-            const badge = document.getElementById('priority-badge');
-            const text = document.getElementById('visitor-text');
+        <div class="quick-responses">
+          <button onclick="speakPreset('Please wait a moment, I am coming to the door.')">⏳ "Please wait"</button>
+          <button onclick="speakPreset('Please leave the package at the front door.')">📦 "Leave package"</button>
+          <button onclick="speakPreset('Please state your business clearly.')">❓ "State business"</button>
+        </div>
 
-            if (priority === 1) {
-                badge.className = "badge normal";
-                badge.innerText = "🔔 NORMAL VISITOR";
-                text.innerText = "1 Press: Someone is at the front door.";
-            } else if (priority === 2) {
-                badge.className = "badge delivery";
-                badge.innerText = "📦 DELIVERY PERSON";
-                text.innerText = "2 Presses: Package delivery person.";
-            } else if (priority >= 3) {
-                badge.className = "badge emergency";
-                badge.innerText = "🚨 EMERGENCY VISITOR";
-                text.innerText = "3+ Presses: Urgent/Emergency visitor!";
-            }
-        }
-    } catch (err) {
-        console.error("Error connecting to ThingSpeak:", err);
-    }
-}
+        <div class="custom-speech">
+          <input type="text" id="customTextInput" placeholder="Type custom voice message..." />
+          <button id="speakBtn" onclick="speakCustomText()">🔊 Speak</button>
+        </div>
 
-// Declare globally outside the function to prevent garbage collection
-let currentUtterance = null;
+        <hr class="divider" />
 
-function speakMessage() {
-    const textInput = document.getElementById('voice-input').value;
+        <h3>📋 Activity Logs</h3>
+        <ul id="logList" class="log-list">
+          <li>System initialized. Ready for incoming triggers...</li>
+        </ul>
+      </div>
 
-    if (!textInput.trim()) {
-        alert("Please enter a message to speak!");
-        return;
-    }
+    </main>
+  </div>
 
-    // Cancel any previous speech stuck in queue
-    window.speechSynthesis.cancel();
-
-    // Create a global utterance instance
-    currentUtterance = new SpeechSynthesisUtterance(textInput);
-    currentUtterance.rate = 1.0;  // Speed (0.1 to 10)
-    currentUtterance.pitch = 1.0; // Pitch (0 to 2)
-    currentUtterance.lang = 'en-US';
-
-    // Log events for debugging in Console (F12)
-    currentUtterance.onstart = () => console.log("🔊 Speech Started...");
-    currentUtterance.onend = () => console.log("✅ Speech Completed!");
-    currentUtterance.onerror = (e) => console.error("❌ Speech Error:", e);
-
-    // Speak
-    window.speechSynthesis.speak(currentUtterance);
-}
-
-// Poll Wokwi Priority Alerts every 3 seconds
-setInterval(fetchThingSpeakData, 3000);
-
-// Sync Live Person Count to ThingSpeak Cloud every 15 seconds (ThingSpeak Rate Limit)
-setInterval(sendPersonCountToThingSpeak, 15000);
-    </script>
+  <!-- JavaScript File -->
+  <script src="script.js"></script>
 </body>
 </html>
