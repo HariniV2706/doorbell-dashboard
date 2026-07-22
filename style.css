@@ -1,0 +1,231 @@
+/* Modern High-Tech Engineering Theme (Dark Navy, Cyan, White) */
+:root {
+  --bg-dark: #0f172a;
+  --card-bg: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --accent-cyan: #38bdf8;
+  --accent-green: #22c55e;
+  --accent-blue: #3b82f6;
+  --accent-red: #ef4444;
+  --border-color: #334155;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.dashboard-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.header h1 {
+  font-size: 2.2rem;
+  color: var(--accent-cyan);
+  letter-spacing: 1px;
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-top: 5px;
+}
+
+/* Status Card */
+.status-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-left: 6px solid var(--accent-cyan);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+  transition: all 0.3s ease;
+}
+
+.status-indicator {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--text-secondary);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+.status-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.status-info h2 {
+  font-size: 1.5rem;
+  margin: 2px 0;
+}
+
+.timestamp {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* Grid Layout */
+.grid-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .grid-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.badge {
+  background-color: #0284c7;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+/* Video Feed */
+.video-container {
+  position: relative;
+  width: 100%;
+  height: 320px;
+  background-color: #000;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.overlay-msg {
+  position: absolute;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 20px;
+  font-size: 0.9rem;
+}
+
+/* Voice Controls & Logs */
+.card-desc {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+}
+
+.quick-responses {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.quick-responses button {
+  background-color: #334155;
+  color: var(--text-primary);
+  border: none;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s;
+}
+
+.quick-responses button:hover {
+  background-color: #475569;
+}
+
+.custom-speech {
+  display: flex;
+  gap: 8px;
+}
+
+.custom-speech input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+}
+
+.custom-speech button {
+  background-color: var(--accent-cyan);
+  color: #0f172a;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.divider {
+  border: 0;
+  height: 1px;
+  background: var(--border-color);
+  margin: 20px 0;
+}
+
+.log-list {
+  list-style: none;
+  max-height: 120px;
+  overflow-y: auto;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.log-list li {
+  padding: 4px 0;
+  border-bottom: 1px solid #33415522;
+}
