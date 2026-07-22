@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Doorbell 2.0 - Live People Count & Cloud Sync</title>
+  <title>Smart Doorbell 2.0 - Live Vision & Cloud Sync</title>
   
   <!-- TensorFlow.js & COCO-SSD Model -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
@@ -21,11 +21,21 @@
 
     h1 { color: #38bdf8; margin-bottom: 5px; }
 
+    /* Date and Time Header Styling */
+    .clock-display {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-bottom: 15px;
+      letter-spacing: 0.5px;
+    }
+
     .status-container {
       display: flex;
       justify-content: center;
       gap: 15px;
       margin: 15px 0;
+      flex-wrap: wrap;
     }
 
     .badge {
@@ -51,6 +61,7 @@
       border-radius: 12px;
       overflow: hidden;
       background-color: #000;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
     }
 
     video, canvas {
@@ -61,18 +72,41 @@
       height: 480px;
     }
 
+    /* Video Feed Camera Overlay (CCTV Style) */
+    .camera-overlay {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-weight: bold;
+      pointer-events: none;
+      text-align: left;
+    }
+
     .controls {
       margin-top: 20px;
     }
 
     input[type="text"] {
-      padding: 10px;
-      width: 300px;
-      border-radius: 5px;
+      padding: 10px 15px;
+      width: 320px;
+      border-radius: 6px;
       border: 1px solid #334155;
       font-size: 1rem;
       background-color: #1e293b;
       color: #fff;
+      outline: none;
+    }
+
+    input[type="text"]:focus {
+      border-color: #38bdf8;
     }
 
     button {
@@ -82,8 +116,9 @@
       color: #0f172a;
       font-weight: bold;
       font-size: 1rem;
-      border-radius: 5px;
+      border-radius: 6px;
       cursor: pointer;
+      transition: background 0.2s;
     }
 
     button:hover { background-color: #7dd3fc; }
@@ -92,14 +127,22 @@
 <body>
 
   <h1>🔔 Smart Doorbell 2.0</h1>
-  <p>Live Visitor Priority & AI People Count Dashboard</p>
+  
+  <!-- Live Date and Time Display -->
+  <div id="clock-display" class="clock-display">📅 Loading Date & Time...</div>
 
   <div class="status-container">
     <div id="status-badge" class="badge">⏳ Waiting for Doorbell...</div>
-    <div id="count-badge" class="badge badge-count">👥 People Count: 0</div>
+    <div id="count-badge" class="badge badge-count">👥 People in Frame: 0</div>
   </div>
 
   <div class="video-container">
+    <!-- CCTV Style On-Video HUD -->
+    <div id="camera-overlay" class="camera-overlay">
+      <div>🔴 LIVE STREAM</div>
+      <div id="hud-count">People Detected: 0</div>
+    </div>
+
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
   </div>
@@ -119,7 +162,7 @@
     let cameraStarted = false;
     let lastEntryId = null;
     let currentPersonCount = 0;
-    let currentPriority = 1; // Default to priority 1
+    let currentPriority = 1;
     let lastCloudSyncTime = 0;
     let currentUtterance = null;
 
@@ -128,16 +171,31 @@
     const ctx = canvas.getContext('2d');
     const statusBadge = document.getElementById('status-badge');
     const countBadge = document.getElementById('count-badge');
+    const hudCount = document.getElementById('hud-count');
+    const clockDisplay = document.getElementById('clock-display');
 
-    // 1. Load TensorFlow COCO-SSD Model
+    // 1. Live Real-Time Clock Function
+    function updateClock() {
+      const now = new Date();
+      
+      const dateOptions = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
+      const dateString = now.toLocaleDateString('en-US', dateOptions);
+      const timeString = now.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      clockDisplay.innerHTML = `📅 ${dateString} | 🕒 ${timeString}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock(); // Initial run
+
+    // 2. Load TensorFlow COCO-SSD Model
     async function loadAIModel() {
-      console.log("Loading COCO-SSD AI Model...");
+      console.log("Loading AI Vision Model...");
       model = await cocoSsd.load();
       console.log("✅ AI Model Loaded!");
     }
     loadAIModel();
 
-    // 2. Start Web Camera
+    // 3. Start Web Camera
     async function startCamera() {
       if (cameraStarted) return;
       
@@ -154,11 +212,11 @@
         };
       } catch (err) {
         console.error("Camera Access Denied:", err);
-        alert("Please enable camera access in your browser settings!");
+        alert("Please enable camera access in your browser permissions!");
       }
     }
 
-    // 3. AI Detection & People Count Loop
+    // 4. Real-time AI Detection & People Count Loop
     async function detectFrame() {
       if (!cameraStarted || !model) return;
 
@@ -168,51 +226,51 @@
       let detectedCount = 0;
 
       predictions.forEach(prediction => {
-        // Filter exclusively for human detections with high confidence (>50%)
+        // Filter specifically for human class with >50% confidence
         if (prediction.class === 'person' && prediction.score > 0.5) {
           detectedCount++;
           const [x, y, width, height] = prediction.bbox;
 
-          // Draw Bounding Box
+          // Draw Bounding Box around person
           ctx.strokeStyle = '#38bdf8';
           ctx.lineWidth = 3;
           ctx.strokeRect(x, y, width, height);
 
-          // Draw Label
+          // Draw Label tag
           ctx.fillStyle = '#38bdf8';
           ctx.font = '16px Segoe UI';
           ctx.fillText(`Person (${Math.round(prediction.score * 100)}%)`, x, y > 20 ? y - 10 : 20);
         }
       });
 
-      // Update Live Web Dashboard Count
+      // Update People Count on Dashboard & Video HUD Overlay
       currentPersonCount = detectedCount;
-      countBadge.innerHTML = `👥 People Count: <b>${currentPersonCount}</b>`;
+      countBadge.innerHTML = `👥 People in Frame: <b>${currentPersonCount}</b>`;
+      hudCount.innerHTML = `People Detected: <b>${currentPersonCount}</b>`;
 
-      // Trigger sync to cloud if count changes or interval reached
+      // Sync count to ThingSpeak graph
       syncCountToThingSpeak();
 
       requestAnimationFrame(detectFrame);
     }
 
-    // 4. Update ThingSpeak Field 2 (People Count Graph)
+    // 5. Update ThingSpeak Field 2 (People Count Graph)
     async function syncCountToThingSpeak() {
       const now = Date.now();
-      // Rate limit to once every 15 seconds (ThingSpeak restriction)
+      // Rate limit updates to every 15 seconds (ThingSpeak API limit)
       if (now - lastCloudSyncTime > 15000) {
         lastCloudSyncTime = now;
         try {
-          // Update Field 1 (Priority) and Field 2 (People Count)
           const url = `https://api.thingspeak.com/update?api_key=${WRITE_KEY}&field1=${currentPriority}&field2=${currentPersonCount}`;
-          const res = await fetch(url);
-          console.log(`📊 Cloud Sync Success -> Field2 (Count): ${currentPersonCount}`);
+          await fetch(url);
+          console.log(`📊 Cloud Sync -> Field 2 (People Count): ${currentPersonCount}`);
         } catch (err) {
           console.error("Cloud Sync Error:", err);
         }
       }
     }
 
-    // 5. Poll ThingSpeak for Wokwi Doorbell Trigger
+    // 6. Poll ThingSpeak for Wokwi Doorbell Trigger
     async function pollThingSpeak() {
       try {
         const response = await fetch(`https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?api_key=${READ_KEY}&results=1`);
@@ -236,7 +294,7 @@
               statusBadge.style.borderColor = "#ef4444";
             }
 
-            // Auto-start camera on button trigger
+            // Auto-open camera when button pressed in Wokwi
             startCamera();
           }
         }
@@ -245,7 +303,7 @@
       }
     }
 
-    // 6. Text-To-Speech Functionality
+    // 7. Text-To-Speech Functionality
     function speakMessage() {
       const text = document.getElementById('voice-input').value;
       if (!text.trim()) return;
@@ -256,7 +314,7 @@
       window.speechSynthesis.speak(currentUtterance);
     }
 
-    // Poll ThingSpeak every 2 seconds for incoming doorbell events
+    // Poll ThingSpeak every 2 seconds
     setInterval(pollThingSpeak, 2000);
   </script>
 </body>
